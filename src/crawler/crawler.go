@@ -40,6 +40,19 @@ func (c *Crawler) AddScraper(s NodeScraper, f NodeFilter) *Crawler {
 	return c
 }
 
+// CrawlNow is a blocking recursive walk over the node tree. Each node is passed
+// to the configured Scrapers.
+func (c *Crawler) CrawlNow() {
+	var f NodeScraper
+	f = func(n *html.Node) {
+		c.Scrape(n)
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(c.GetNodeTree())
+}
+
 type Signal struct{}
 
 // Crawl is non-blocking. Will report completion on the chan Signal
@@ -66,15 +79,4 @@ func (c *Crawler) GetNodeTree() *html.Node {
 	c.Root = parentNode
 
 	return parentNode
-}
-
-func (c *Crawler) CrawlNow() {
-	var f NodeScraper
-	f = func(n *html.Node) {
-		c.Scrape(n)
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			f(c)
-		}
-	}
-	f(c.GetNodeTree())
 }

@@ -35,3 +35,13 @@ func ScrapeUrls(n *html.Node) {
 		}
 	}
 }
+
+func RecoverUrls(generator chan<- string) NodeScraper {
+	return func(n *html.Node) {
+		for _, attr := range n.Attr {
+			if attr.Key == "src" || attr.Key == "href" {
+				generator <- attr.Val
+			}
+		}
+	}
+}

@@ -10,6 +10,8 @@ var args struct {
 	Target string `arg:"positional"`
 }
 
+var urlChan = make(chan string)
+
 func main() {
 	arg.MustParse(&args)
 	swarm := crawler.
@@ -24,6 +26,6 @@ func CrawlerSpawner(target string) *crawler.Crawler {
 	log.Println("Spawning Crawler")
 	HasLinks := crawler.HasAttrs("src", "href")
 	return crawler.NewCrawler(target).
-		AddScraper(crawler.ScrapeUrls, HasLinks).
+		AddScraper(crawler.RecoverUrls(urlChan), HasLinks).
 		AddScraper(crawler.Dump, HasLinks.And(crawler.IsLeafNode))
 }

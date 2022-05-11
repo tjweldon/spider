@@ -15,7 +15,10 @@ func NewDeque[T any]() *Deque[T] {
 }
 
 func (d *Deque[T]) Insert(item T) {
-	d.members = append(d.members, item)
+	d.members = append(
+		d.members,
+		item,
+	)
 }
 
 func (d *Deque[T]) IsEmpty() bool {
