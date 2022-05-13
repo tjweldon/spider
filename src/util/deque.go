@@ -26,11 +26,18 @@ func (d *Deque[T]) IsEmpty() bool {
 }
 
 func (d *Deque[T]) TakeOne() T {
-	item := d.members[0]
-	if len(d.members) > 1 {
+	count := len(d.members)
+	var item T
+
+	if count >= 1 {
+		item = d.members[0]
+	}
+
+	if count > 1 {
 		d.members = append([]T{}, d.members[1:]...)
-	} else {
+	} else if len(d.members) == 1 {
 		d.members = []T{}
 	}
+
 	return item
 }

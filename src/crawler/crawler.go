@@ -12,15 +12,17 @@ type FilteredScraper struct {
 }
 
 type Crawler struct {
-	Target   string
 	Scrapers []FilteredScraper
 	Root     *html.Node
 	Done     chan Signal
+	Ready    bool
 }
 
-func NewCrawler(target string) *Crawler {
+func NewCrawler() *Crawler {
+	done := make(chan Signal)
 	return &Crawler{
-		Target: target,
+		Done:  done,
+		Ready: true,
 	}
 }
 
@@ -42,36 +44,31 @@ func (c *Crawler) AddScraper(s NodeScraper, f NodeFilter) *Crawler {
 
 // CrawlNow is a blocking recursive walk over the node tree. Each node is passed
 // to the configured Scrapers.
-func (c *Crawler) CrawlNow() {
+func (c *Crawler) CrawlNow(target string) {
 	var f NodeScraper
 	f = func(n *html.Node) {
 		c.Scrape(n)
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			f(c)
+		for child := n.FirstChild; child != nil; child = child.NextSibling {
+			f(child)
 		}
 	}
-	f(c.GetNodeTree())
+	f(c.GetNodeTree(target))
 }
 
 type Signal struct{}
 
 // Crawl is non-blocking. Will report completion on the chan Signal
 // passed if not nil.
-func (c *Crawler) Crawl(done chan Signal) {
+func (c *Crawler) Crawl(target string) {
 	log.Println("Beginning crawl...")
-	if done != nil {
-		c.Done = done
-		go func() {
-			c.CrawlNow()
-			c.Done <- Signal{}
-		}()
-	} else {
-		go c.CrawlNow()
-	}
+	go func(d chan Signal, t string) {
+		c.CrawlNow(t)
+		d <- Signal{}
+	}(c.Done, target)
 }
 
-func (c *Crawler) GetNodeTree() *html.Node {
-	resp := util.MustGet(c.Target)
+func (c *Crawler) GetNodeTree(target string) *html.Node {
+	resp := util.MustGet(target)
 	parentNode, err := html.Parse(resp.Body)
 	if err != nil {
 		log.Fatal(err)
@@ -79,4 +76,8 @@ func (c *Crawler) GetNodeTree() *html.Node {
 	c.Root = parentNode
 
 	return parentNode
+}
+
+func (c *Crawler) Die() {
+	close(c.Done)
 }

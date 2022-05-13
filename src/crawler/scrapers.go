@@ -4,6 +4,7 @@ import (
 	"golang.org/x/net/html"
 	"log"
 	"os"
+	"tjweldon/spider/src/util"
 )
 
 var Urls []string
@@ -36,11 +37,11 @@ func ScrapeUrls(n *html.Node) {
 	}
 }
 
-func RecoverUrls(generator chan<- string) NodeScraper {
+func RecoverUrls(dispatcher util.Dispatcher[string]) NodeScraper {
 	return func(n *html.Node) {
 		for _, attr := range n.Attr {
 			if attr.Key == "src" || attr.Key == "href" {
-				generator <- attr.Val
+				dispatcher.Dispatch(attr.Val)
 			}
 		}
 	}

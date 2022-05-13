@@ -7,95 +7,108 @@ import (
 	"tjweldon/spider/src/util"
 )
 
-const SwarmSize = 2
+const SwarmSize = 10
 
-type Spawner func(job string) *Crawler
+type Spawner func() *Crawler
 
 type Swarm struct {
 	Spawner  Spawner
 	Crawlers [SwarmSize]*Crawler
-	Signals  [SwarmSize]chan Signal
 	Jobs     *util.Deque[string]
+	incoming util.Backlog[string]
 }
 
-func NewSwarm() *Swarm {
+// NewSwarm returns a pointer to a new spawn instance
+func NewSwarm(spawner Spawner) *Swarm {
 	log.Println("Initialising Swarm")
+
+	crawlers := [SwarmSize]*Crawler{}
+	for i := range crawlers {
+		crawlers[i] = spawner()
+	}
+
 	swarm := &Swarm{
 		Jobs:     util.NewDeque[string](),
-		Crawlers: [SwarmSize]*Crawler{},
-		Spawner:  NewCrawler,
-		Signals: [2]chan Signal{
-			make(chan Signal),
-			make(chan Signal),
-		},
+		Crawlers: crawlers,
+		Spawner:  spawner,
 	}
 	return swarm
 }
 
-func (s *Swarm) Kill() {
-	for _, sigChan := range s.Signals {
-		close(sigChan)
-	}
-}
-
+// Spawn starts the swarm at the
 func (s *Swarm) Spawn() {
-	log.Println("Spawning & consuming")
-	var (
-		crawlerId int
-	)
-	next := func(cId int) int {
-		return (cId + 1) % len(s.Signals)
-	}
-
-	go s.startSignals()
+	log.Println("Spawning & Consuming")
 	for {
-		crawlerId = next(crawlerId)
+		// if we run out of jobs
+		time.Sleep(time.Second / 5)
 
-		fmt.Printf("Crawler Id %d\n", crawlerId)
-		time.Sleep(time.Second / 10)
-		select {
-		case <-s.Signals[crawlerId]:
-			if s.Crawlers[crawlerId] != nil {
-				log.Printf("Successfully Crawled %s\n", s.Crawlers[crawlerId].Target)
+		// Poll incoming for jobs, break loop when
+		// the next job isn't immediately available
+	inner:
+		for {
+			select {
+			case job := <-s.incoming.Channel():
+				s.Jobs.Insert(job)
+				break
+			default:
+				break inner
 			}
-			s.Crawlers[crawlerId] = nil
-			if !s.Jobs.IsEmpty() {
+		}
+
+		// if there's no jobs and no running crawlers
+		// after polling, we're done
+		if s.Jobs.IsEmpty() && s.countRunning() == 0 {
+			fmt.Println("returning")
+			return
+		}
+
+		// Check all the crawlers and refresh
+		// any that are reporting completion.
+		for crawlerId := range s.Crawlers {
+			select {
+			// Mark done crawlers as ready
+			case <-s.Crawlers[crawlerId].Done:
+				s.Crawlers[crawlerId].Ready = true
+				log.Println("Crawler done")
+			default:
+			}
+
+			// Wrangle any Crawlers that are ready and give them
+			// a job to do
+			if !s.Jobs.IsEmpty() && s.Crawlers[crawlerId].Ready {
 				s.refreshCrawler(crawlerId)
-			}
-		default:
-			if s.Jobs.IsEmpty() && s.Population() == 0 {
-				return
 			}
 		}
 	}
 }
 
-func (s *Swarm) startSignals() {
-	for _, sChan := range s.Signals {
-		sChan <- Signal{}
-	}
+// refreshCrawler gives the identified crawler a new job to do
+func (s *Swarm) refreshCrawler(crawlerId int) {
+	job := s.Jobs.TakeOne()
+	s.Crawlers[crawlerId].Crawl(job)
+	log.Printf("Refreshing... Job: %s\n", job)
 }
 
-func (s *Swarm) Population() (count int) {
+// countRunning returns the number of currently running crawlers
+func (s *Swarm) countRunning() int {
+	count := 0
 	for _, crawler := range s.Crawlers {
-		if crawler != nil {
+		if !crawler.Ready {
 			count++
 		}
 	}
+
 	return count
 }
 
-func (s *Swarm) refreshCrawler(crawlerId int) {
-	log.Println("Refreshing...")
-	s.Crawlers[crawlerId] = s.Spawner(s.Jobs.TakeOne())
-	s.Crawlers[crawlerId].Crawl(s.Signals[crawlerId])
-}
-
-func (s *Swarm) SetSpawner(c Spawner) *Swarm {
-	s.Spawner = c
+// SetIncoming fluently sets the backlog of work for the swarm
+func (s *Swarm) SetIncoming(incoming util.Backlog[string]) *Swarm {
+	s.incoming = incoming
 	return s
 }
 
+// SeedJobs initialises the Swarm. Make sure to adequately feed the
+// Swarm, it dies without food!
 func (s *Swarm) SeedJobs(jobs ...string) *Swarm {
 	for _, j := range jobs {
 		s.Jobs.Insert(j)
