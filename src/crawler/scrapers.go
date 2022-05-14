@@ -11,6 +11,12 @@ var Urls []string
 
 type NodeScraper func(node *html.Node)
 
+// Then composes scraping operations sequentially:
+//
+//      var ns NodeScraper = ns1.Then(ns2).Then(ns3)
+//
+// The scraper assigned to ns executes the scrapers in
+// the order ns1, ns2, ns3
 func (ns1 NodeScraper) Then(ns2 NodeScraper) NodeScraper {
 	return func(node *html.Node) {
 		ns1(node)
@@ -18,7 +24,7 @@ func (ns1 NodeScraper) Then(ns2 NodeScraper) NodeScraper {
 	}
 }
 
-func Dump(n *html.Node) {
+func DumpHtml(n *html.Node) {
 	err := html.Render(os.Stdout, n)
 	if err != nil {
 		log.Fatal(err)
@@ -45,4 +51,7 @@ func RecoverUrls(dispatcher util.Dispatcher[string]) NodeScraper {
 			}
 		}
 	}
+}
+
+type Report struct {
 }

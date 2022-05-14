@@ -25,13 +25,12 @@ func main() {
 
 func RegexpTesting() {
 	f := func(item string) string {
-		return crawlUrlPattern.
-			ReplaceAllStringFunc(
-				item,
-				func(s string) string {
-					return strings.ToUpper(s)
-				},
-			)
+		replacement := func(s string) string {
+			return strings.ToUpper(s)
+		}
+		return crawlUrlPattern.ReplaceAllStringFunc(
+			item, replacement,
+		)
 	}
 	tests := []string{
 		"http://127.0.0.1:8000/url-encode.c",
@@ -47,13 +46,14 @@ func RegexpTesting() {
 
 func DoCrawl() {
 	dispatcher, backlog := util.NewQ[string]()
+
 	withDeDuplication := util.
 		WithDeDuplication[string](dispatcher).
-		SetMaxJobs(50)
+		SetMaxJobs(256)
+
 	withValidation := AddValidation(withDeDuplication)
 	withPreProcessors := AddPreProcessors(withValidation)
 
-	log.Printf("%+v\n", withPreProcessors)
 	swarm := crawler.
 		NewSwarm(NewSpawner(withPreProcessors).Spawn).
 		SetIncoming(backlog).
@@ -115,6 +115,5 @@ func (s *Spawner) Spawn() *crawler.Crawler {
 	log.Println("Spawning Crawler")
 	HasLinks := crawler.HasAttrs("src", "href")
 	return crawler.NewCrawler().
-		AddScraper(crawler.RecoverUrls(s.dispatcher), HasLinks).
-		AddScraper(crawler.Dump, HasLinks.And(crawler.IsLeafNode))
+		AddScraper(crawler.RecoverUrls(s.dispatcher), HasLinks) // AddScraper(crawler.DumpHtml, HasLinks.And(crawler.IsLeafNode))
 }

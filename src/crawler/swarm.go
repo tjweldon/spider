@@ -7,7 +7,7 @@ import (
 	"tjweldon/spider/src/util"
 )
 
-const SwarmSize = 10
+const SwarmSize = 20
 
 type Spawner func() *Crawler
 
@@ -37,23 +37,12 @@ func NewSwarm(spawner Spawner) *Swarm {
 
 // Spawn starts the swarm at the
 func (s *Swarm) Spawn() {
+	var restartCount int
 	log.Println("Spawning & Consuming")
 	for {
-		// if we run out of jobs
-		time.Sleep(time.Second / 5)
+		time.Sleep(time.Second / 10)
 
-		// Poll incoming for jobs, break loop when
-		// the next job isn't immediately available
-	inner:
-		for {
-			select {
-			case job := <-s.incoming.Channel():
-				s.Jobs.Insert(job)
-				break
-			default:
-				break inner
-			}
-		}
+		s.pollIncomingJobs()
 
 		// if there's no jobs and no running crawlers
 		// after polling, we're done
@@ -64,20 +53,38 @@ func (s *Swarm) Spawn() {
 
 		// Check all the crawlers and refresh
 		// any that are reporting completion.
+		restartCount = 0
 		for crawlerId := range s.Crawlers {
 			select {
 			// Mark done crawlers as ready
 			case <-s.Crawlers[crawlerId].Done:
 				s.Crawlers[crawlerId].Ready = true
-				log.Println("Crawler done")
 			default:
 			}
 
 			// Wrangle any Crawlers that are ready and give them
 			// a job to do
 			if !s.Jobs.IsEmpty() && s.Crawlers[crawlerId].Ready {
+				restartCount++
 				s.refreshCrawler(crawlerId)
 			}
+		}
+		log.Printf("%d crawlers restarted\n", restartCount)
+	}
+}
+
+// pollIncomingJobs for jobs, break loop when
+// the next job isn't immediately available
+func (s *Swarm) pollIncomingJobs() {
+inner:
+	for {
+		time.Sleep(time.Millisecond * 10)
+		select {
+		case job := <-s.incoming.Channel():
+			s.Jobs.Insert(job)
+			break
+		default:
+			break inner
 		}
 	}
 }
@@ -114,4 +121,8 @@ func (s *Swarm) SeedJobs(jobs ...string) *Swarm {
 		s.Jobs.Insert(j)
 	}
 	return s
+}
+
+type SwarmReport struct {
+	Duration time.Duration
 }
