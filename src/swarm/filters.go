@@ -1,4 +1,4 @@
-package crawler
+package swarm
 
 import (
 	"golang.org/x/net/html"

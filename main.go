@@ -6,8 +6,9 @@ import (
 	"log"
 	"regexp"
 	"strings"
-	"tjweldon/spider/src/crawler"
-	"tjweldon/spider/src/util"
+	"tjweldon/spider/src/messaging"
+	"tjweldon/spider/src/reporting"
+	"tjweldon/spider/src/swarm"
 )
 
 var args struct {
@@ -23,54 +24,43 @@ func main() {
 	DoCrawl()
 }
 
-func RegexpTesting() {
-	f := func(item string) string {
-		replacement := func(s string) string {
-			return strings.ToUpper(s)
-		}
-		return crawlUrlPattern.ReplaceAllStringFunc(
-			item, replacement,
-		)
-	}
-	tests := []string{
-		"http://127.0.0.1:8000/url-encode.c",
-		"http://127.0.0.1:8000/urlenc",
-		"http://127.0.0.1:8000/a.out",
-		"http://127.0.0.1:8000/",
-	}
+func DoCrawl() {
+	dispatcher, backlog := messaging.NewQ[string](swarm.SwarmSize * 1024)
+	withPreProcessors := ProvisionDispatcher(dispatcher)
 
-	for _, t := range tests {
-		fmt.Println("Matches " + f(t))
-	}
+	var (
+		fork   messaging.Backlog[string]
+		result <-chan string
+	)
+
+	backlog, fork = messaging.Fork(backlog)
+	result = reporting.DomainsReport(fork)
+
+	s := swarm.
+		NewSwarm(NewSpawner(withPreProcessors).Create).
+		SetIncoming(backlog).
+		SetDispatcher(withPreProcessors, args.Target)
+	defer CleanUp(result, withPreProcessors)
+
+	s.Spawn()
 }
 
-func DoCrawl() {
-	dispatcher, backlog := util.NewQ[string]()
-
-	withDeDuplication := util.
-		WithDeDuplication[string](dispatcher).
+func ProvisionDispatcher(dispatcher messaging.Dispatcher[string]) messaging.Dispatcher[string] {
+	withDeDuplication := messaging.WithDeDuplication[string](dispatcher).
 		SetMaxJobs(256)
 
 	withValidation := AddValidation(withDeDuplication)
 	withPreProcessors := AddPreProcessors(withValidation)
-
-	swarm := crawler.
-		NewSwarm(NewSpawner(withPreProcessors).Spawn).
-		SetIncoming(backlog).
-		SeedJobs(args.Target)
-	defer CleanUp(withDeDuplication)
-
-	swarm.Spawn()
+	return withPreProcessors
 }
 
-func CleanUp(dispatcher *util.DeDuplicatingDispatcher[string]) {
-	for _, job := range dispatcher.ReportDispatched() {
-		fmt.Println(job)
-	}
+func CleanUp(result <-chan string, d messaging.Dispatcher[string]) {
+	d.Close()
+	fmt.Println(<-result)
 }
 
-func AddPreProcessors(dispatcher util.Dispatcher[string]) util.Dispatcher[string] {
-	dispatcher = util.WithPreProcessing[string](
+func AddPreProcessors(dispatcher messaging.Dispatcher[string]) messaging.Dispatcher[string] {
+	dispatcher = messaging.WithPreProcessing[string](
 		dispatcher,
 		func(item string) string {
 			return strings.TrimLeft(item, "./")
@@ -80,8 +70,8 @@ func AddPreProcessors(dispatcher util.Dispatcher[string]) util.Dispatcher[string
 				return item
 			}
 			target := strings.TrimRight(args.Target, "/")
-			alt_target := strings.Join(strings.Split(target, "www."), "")
-			if !(strings.HasPrefix(item, target) || strings.HasPrefix(item, alt_target)) {
+			altTarget := strings.Join(strings.Split(target, "www."), "")
+			if !(strings.HasPrefix(item, target) || strings.HasPrefix(item, altTarget)) {
 				return strings.Join([]string{target, item}, "/")
 			}
 			return item
@@ -90,8 +80,8 @@ func AddPreProcessors(dispatcher util.Dispatcher[string]) util.Dispatcher[string
 	return dispatcher
 }
 
-func AddValidation(dispatcher util.Dispatcher[string]) util.Dispatcher[string] {
-	dispatcher = util.WithValidation[string](
+func AddValidation(dispatcher messaging.Dispatcher[string]) messaging.Dispatcher[string] {
+	dispatcher = messaging.WithValidation[string](
 		dispatcher,
 		func(item string) bool {
 			return !strings.Contains(item, "#")
@@ -104,16 +94,17 @@ func AddValidation(dispatcher util.Dispatcher[string]) util.Dispatcher[string] {
 }
 
 type Spawner struct {
-	dispatcher util.Dispatcher[string]
+	dispatcher messaging.Dispatcher[string]
 }
 
-func NewSpawner(dispatcher util.Dispatcher[string]) *Spawner {
+func NewSpawner(dispatcher messaging.Dispatcher[string]) *Spawner {
 	return &Spawner{dispatcher: dispatcher}
 }
 
-func (s *Spawner) Spawn() *crawler.Crawler {
+func (s *Spawner) Create() *swarm.Crawler {
 	log.Println("Spawning Crawler")
-	HasLinks := crawler.HasAttrs("src", "href")
-	return crawler.NewCrawler().
-		AddScraper(crawler.RecoverUrls(s.dispatcher), HasLinks) // AddScraper(crawler.DumpHtml, HasLinks.And(crawler.IsLeafNode))
+	HasLinks := swarm.HasAttrs("src", "href")
+	return swarm.NewCrawler().
+		AddScraper(swarm.RecoverUrls(s.dispatcher), HasLinks)
+	// .AddScraper(swarm.DumpHtml, HasLinks.And(swarm.IsLeafNode))
 }

@@ -1,10 +1,10 @@
-package crawler
+package swarm
 
 import (
 	"golang.org/x/net/html"
 	"log"
 	"os"
-	"tjweldon/spider/src/util"
+	"tjweldon/spider/src/messaging"
 )
 
 var Urls []string
@@ -43,15 +43,14 @@ func ScrapeUrls(n *html.Node) {
 	}
 }
 
-func RecoverUrls(dispatcher util.Dispatcher[string]) NodeScraper {
+func RecoverUrls(dispatcher messaging.Dispatcher[string]) NodeScraper {
 	return func(n *html.Node) {
 		for _, attr := range n.Attr {
 			if attr.Key == "src" || attr.Key == "href" {
-				dispatcher.Dispatch(attr.Val)
+				if !dispatcher.Dispatch(attr.Val) {
+					return
+				}
 			}
 		}
 	}
-}
-
-type Report struct {
 }
