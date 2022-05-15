@@ -2,7 +2,6 @@ package swarm
 
 import (
 	"log"
-	"time"
 	"tjweldon/spider/src/messaging"
 )
 
@@ -35,6 +34,8 @@ func NewSwarm(spawner Spawner) *Swarm {
 	return swarm
 }
 
+// Spawn runs the swarm, starting the feedback loop with
+// whatever jobs have been seeded.
 func (s *Swarm) Spawn() {
 	workers := [SwarmSize]*Worker{}
 	for i, crawler := range s.Crawlers {
@@ -48,6 +49,7 @@ func (s *Swarm) Spawn() {
 	s.dispatcher.Close()
 }
 
+// workersDone counts the number of workers reporting completion
 func (s *Swarm) workersDone(workers [SwarmSize]*Worker) (count int) {
 	for _, worker := range workers {
 		if worker.IsDone() {
@@ -76,14 +78,11 @@ func (s *Swarm) SetIncoming(incoming messaging.Backlog[string]) *Swarm {
 	return s
 }
 
+// SetDispatcher allows the dispatcher that relays found URLs back to the job queue
 func (s *Swarm) SetDispatcher(dispatcher messaging.Dispatcher[string], seedJobs ...string) *Swarm {
 	s.dispatcher = dispatcher
 	for _, job := range seedJobs {
 		s.dispatcher.Dispatch(job)
 	}
 	return s
-}
-
-type SwarmReport struct {
-	Duration time.Duration
 }
