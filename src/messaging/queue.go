@@ -21,9 +21,9 @@ func NewQ[T any](size int) (Dispatcher[T], Backlog[T]) {
 }
 
 func (q *Queue[T]) Split() (Dispatcher[T], Backlog[T]) {
-	receive := func(in <-chan T, queue chan<- T) {
+	receive := func(incoming <-chan T, queue chan<- T) {
 		defer close(queue)
-		for msg := range in {
+		for msg := range incoming {
 			queue <- msg
 		}
 	}

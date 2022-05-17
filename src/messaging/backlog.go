@@ -8,8 +8,8 @@ type Backlog[T any] interface {
 }
 
 type ForkedBacklog[T any] struct {
-	output  <-chan T
-	orginal Backlog[T]
+	output   <-chan T
+	original Backlog[T]
 }
 
 func (fb *ForkedBacklog[T]) Channel() <-chan T {
@@ -17,11 +17,11 @@ func (fb *ForkedBacklog[T]) Channel() <-chan T {
 }
 
 func (fb *ForkedBacklog[T]) Length() int {
-	return fb.orginal.Length()
+	return fb.original.Length()
 }
 
-func Fork[T any](b Backlog[T]) (Backlog[T], Backlog[T]) {
-	original := b.Channel()
-	c1, c2 := util.Split[T](original, 0)
-	return &ForkedBacklog[T]{c1, b}, &ForkedBacklog[T]{c2, b}
+func Fork[T any](original Backlog[T]) (Backlog[T], Backlog[T]) {
+	originalChannel := original.Channel()
+	c1, c2 := util.Split[T](originalChannel, 0)
+	return &ForkedBacklog[T]{c1, original}, &ForkedBacklog[T]{c2, original}
 }
