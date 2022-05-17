@@ -12,7 +12,8 @@ import (
 )
 
 var args struct {
-	Target string `arg:"positional"`
+	Target  string `arg:"positional" help:"The initial url to start the swarm off at."`
+	MaxJobs int    `arg:"-l,--limit" default:"256" help:"The number of urls the swarm will visit, increase at your own risk."`
 }
 
 var crawlUrlPattern = regexp.MustCompile(
