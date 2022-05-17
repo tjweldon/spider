@@ -67,7 +67,8 @@ func (c *Crawler) AddScraper(s NodeScraper, f NodeFilter) *Crawler {
 }
 
 // CrawlNow is a blocking recursive walk over the node tree. Each node is passed
-// to the configured Scrapers.
+// to the configured Scrapers. If there is an error retrieving the response,
+// CrawlNow just returns so it can be made ready to pick up another job.
 func (c *Crawler) CrawlNow(target string) {
 	var f NodeScraper
 	c.Root = nil
@@ -77,7 +78,10 @@ func (c *Crawler) CrawlNow(target string) {
 			f(child)
 		}
 	}
-	f(c.populateNodeTree(target))
+	tree := c.populateNodeTree(target)
+	if tree != nil {
+		f(tree)
+	}
 }
 
 type Signal struct{}
@@ -95,7 +99,10 @@ func (c *Crawler) Crawl(target string) {
 // populateNodeTree retrieves the html from the target URL and parses it
 // into a node tree. It then stores it in Crawler.Root.
 func (c *Crawler) populateNodeTree(target string) *html.Node {
-	resp := util.MustGet(target)
+	resp := util.GetOrNil(target)
+	if resp == nil {
+		return nil
+	}
 	parentNode, err := html.Parse(resp.Body)
 	if err != nil {
 		log.Fatal(err)

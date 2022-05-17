@@ -9,6 +9,8 @@ const SwarmSize = 5
 
 type Spawner func() *Crawler
 
+// Swarm is the aggregation of crawler workers. It encapsulates their collective
+// state and coordinates them.
 type Swarm struct {
 	Spawner    Spawner
 	Crawlers   [SwarmSize]*Crawler
